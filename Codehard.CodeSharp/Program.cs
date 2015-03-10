@@ -4,19 +4,45 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using ActionType = System.Tuple<System.Action<object>, bool>;
-using CollectionType = System.Tuple<System.Guid, string, System.Collections.Generic.List<System.Tuple<System.Action<object>, bool>>>;
 
 namespace Codehard.CodeSharp
 {
+    internal class ActionType
+    {
+        public ActionType() { }
+        public ActionType(Action<object> Callback, bool BindOnce)
+        {
+            this.Callback = Callback;
+            this.BindOnce = BindOnce;
+        }
+
+        public Action<object> Callback { get; set; }
+        public bool BindOnce { get; set; }
+    }
+
+    internal class EventCollection
+    {
+        public EventCollection() { }
+        public EventCollection(Guid Id, string Event, List<ActionType> Callbacks)
+        {
+            this.Id = Id;
+            this.Event = Event;
+            this.Callbacks = Callbacks;
+        }
+
+        public Guid Id { get; set; }
+        public string Event { get; set; }
+        public List<ActionType> Callbacks { get; set; }
+    }
+
     public class Emitter
     {
-        private static List<CollectionType> EventCollection { get; set; }
+        private static List<EventCollection> EventCollection { get; set; }
         private Guid ID { get; set; }
 
         static Emitter()
         {
-            EventCollection = new List<CollectionType>();
+            EventCollection = new List<EventCollection>();
         }
 
         public Emitter()
@@ -34,32 +60,32 @@ namespace Codehard.CodeSharp
             }
             else
             {
-                EventCollection.Add(new CollectionType(this.ID, Event, new List<ActionType> { Callback }));
+                EventCollection.Add(new EventCollection(this.ID, Event, new List<ActionType> { Callback }));
             }
         }
 
         private void _Destroy(List<ActionType> EventList, Action<object> Callback)
         {
-            EventList.RemoveAll(x => x.Item1 == Callback);
+            EventList.RemoveAll(x => x.Callback == Callback);
         }
 
         private static void Invoke(List<ActionType> EventList, object Value)
         {
             if (EventList != null)
             {
-                Parallel.Invoke(EventList.Select(x => (Action)(() => x.Item1(Value))).ToArray());
-                EventList.RemoveAll(x => x.Item2);
+                Parallel.Invoke(EventList.Select(x => (Action)(() => x.Callback(Value))).ToArray());
+                EventList.RemoveAll(x => x.BindOnce);
             }
         }
 
         private static List<ActionType> GetEventList(string Event)
         {
-            return EventCollection.Where(x => x.Item2 == Event).SelectMany(x => x.Item3).ToList();
+            return EventCollection.Where(x => x.Event == Event).SelectMany(x => x.Callbacks).ToList();
         }
 
-        private static List<ActionType> GetEventList(Guid ID, string Event)
+        private static List<ActionType> GetEventList(Guid Id, string Event)
         {
-            return EventCollection.Where(x => x.Item1 == ID && x.Item2 == Event).Select(x => x.Item3).FirstOrDefault();
+            return EventCollection.Where(x => x.Id == Id && x.Event == Event).Select(x => x.Callbacks).FirstOrDefault();
         }
 
         public void Emit(string Event, object Value)
